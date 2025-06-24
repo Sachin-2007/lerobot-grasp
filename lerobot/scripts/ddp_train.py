@@ -51,6 +51,14 @@ import sys
 
 sys.path.insert(0, "/kaggle/working/myenv/lib/python3.11/site-packages")
 
+# Suppress common warnings in Kaggle environment
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium.envs.registration")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resources")
+warnings.filterwarnings("ignore", message=".*shimmy.registration.*")
+warnings.filterwarnings("ignore", message=".*pkg_resources.declare_namespace.*")
+warnings.filterwarnings("ignore", message=".*partially initialized module 'gymnasium'.*")
+
 import logging
 import os
 import time
@@ -392,6 +400,7 @@ def train_ddp(rank: int, world_size: int, cfg: TrainPipelineConfig):
 
         if is_main_process(rank):
             logging.info("Start distributed offline training on a fixed dataset")
+            logging.info(f"DDP: Using {world_size} GPUs, batch_size={cfg.batch_size} per GPU, total batch_size={cfg.batch_size * world_size}")
         
         for _ in range(step, cfg.steps):
             # Set epoch for the sampler to ensure proper shuffling across epochs
@@ -423,12 +432,8 @@ def train_ddp(rank: int, world_size: int, cfg: TrainPipelineConfig):
             train_tracker.step()
             is_log_step = cfg.log_freq > 0 and step % cfg.log_freq == 0
             is_saving_step = step % cfg.save_freq == 0 or step == cfg.steps
-            is_eval_step = cfg.eval_freq > 0 and step % cfg.eval_freq == 0
-
-            # Only log from rank 0
+            is_eval_step = cfg.eval_freq > 0 and step % cfg.eval_freq == 0            # Only log from rank 0
             if is_main_process(rank) and is_log_step:
-                # Synchronize metrics across all ranks
-                wait_for_everyone()
                 logging.info(train_tracker)
                 if wandb_logger:
                     wandb_log_dict = train_tracker.to_dict()
@@ -439,19 +444,13 @@ def train_ddp(rank: int, world_size: int, cfg: TrainPipelineConfig):
 
             # Only save checkpoints from rank 0
             if is_main_process(rank) and cfg.save_checkpoint and is_saving_step:
-                # Synchronize before saving
-                wait_for_everyone()
                 logging.info(f"Checkpoint policy after step {step}")
                 checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
                 save_checkpoint(checkpoint_dir, step, cfg, policy.module, optimizer, lr_scheduler)  # Use .module
                 update_last_checkpoint(checkpoint_dir)
                 if wandb_logger:
-                    wandb_logger.log_policy(checkpoint_dir)
-
-            # Only evaluate on rank 0
+                    wandb_logger.log_policy(checkpoint_dir)            # Only evaluate on rank 0
             if is_main_process(rank) and cfg.env and is_eval_step:
-                # Synchronize before evaluation
-                wait_for_everyone()
                 step_id = get_step_identifier(step, cfg.steps)
                 logging.info(f"Eval policy at step {step}")
                 with (
