@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
@@ -46,11 +45,6 @@ Note that in both examples, the repo/folder should contain at least `config.json
 
 You can learn about the CLI options for this script in the `EvalPipelineConfig` in lerobot/configs/eval.py
 """
-
-import sys
-sys.path.insert(0, '/kaggle/working/myenv/lib/python3.11/site-packages')
-import os 
-os.environ['MUJOCO_GL'] = 'egl'
 
 import json
 import logging
